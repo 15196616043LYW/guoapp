@@ -139,7 +139,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   windows:
-    if: false
     needs: checks
     runs-on: windows-latest
     timeout-minutes: 45
@@ -153,6 +152,44 @@ jobs:
             arguments: '--all-sources'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
+          path-type: inherit
+      - name: 校验 MinGW-w64
+        shell: pwsh
+        run: |
+          $gcc = 'C:\msys64\mingw64\bin\x86_64-w64-mingw32-gcc.exe'
+          if (-not (Test-Path $gcc)) { throw "MinGW-w64 未就绪: $gcc" }
+          Split-Path $gcc | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $gcc --version | Select-Object -First 1
+      - run: python scripts/build_windows.py ${{ matrix.arguments }}
+      - name: 校验产物
+        shell: pwsh
+        run: |
+          $zips = Get-ChildItem dist/windows/*.zip -ErrorAction SilentlyContinue
+          if (-not $zips) { throw 'dist/windows 未生成 zip' }
+          $zips | ForEach-Object { "$($_.Name) $($_.Length) bytes" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.edition }}-windows
+          path: dist/windows/*
+          if-no-files-found: error
+          retention-days: 14
 
   ios:
     if: false
@@ -171,7 +208,7 @@ jobs:
       - uses: actions/checkout@v4
 
   release:
-    needs: [android]
+    needs: [android, windows]
     if: always() && needs.android.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
