@@ -175,7 +175,17 @@ jobs:
           if (-not $exe) { throw 'MinGW-w64 install failed' }
           Split-Path $exe | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & $exe --version | Select-Object -First 1
+      - name: 同步 pubspec.lock
+        run: flutter pub get
       - run: python scripts/build_windows.py ${{ matrix.arguments }}
+      - name: 诊断产物目录
+        if: always()
+        shell: pwsh
+        run: |
+          $bundle = 'build/windows/x64/runner/Release'
+          if (Test-Path $bundle) {
+            Get-ChildItem -Recurse -File $bundle | Select-Object -First 30 | ForEach-Object { $_.FullName.Substring((Resolve-Path $bundle).Path.Length) }
+          } else { 'bundle missing' }
       - name: 校验产物
         shell: pwsh
         run: |
